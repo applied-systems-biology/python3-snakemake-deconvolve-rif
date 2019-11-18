@@ -17,12 +17,15 @@ def deconvolve(input_data_file, data_voxel_size, input_psf_file, psf_voxel_size,
     psf_new_shape = tuple(int(x) for x in psf_new_shape)
     psf = transform.resize(psf, psf_new_shape)
 
+    # FFT output shape
+    fft_shape = np.maximum(img.shape, psf.shape)
+
     # Transform into Fourier space
     img = img_as_float(img)
-    img_fft = np.fft.fftn(img)
+    img_fft = np.fft.fftn(img, s=fft_shape)
 
     psf = img_as_float(psf)
-    psf_fft = np.fft.fftn(psf, s=img_fft.shape)
+    psf_fft = np.fft.fftn(psf, s=fft_shape)
 
     # Apply RIF
     # Adapted from DeconvolutionLab2 code
@@ -41,7 +44,7 @@ def deconvolve(input_data_file, data_voxel_size, input_psf_file, psf_voxel_size,
     FA = H2 + L2
     FT = H / FA
     X = Y * FT
-    deconv = np.fft.ifftn(X).real
+    deconv = np.fft.ifftn(X, s=img.shape).real
     deconv -= np.min(deconv)
     deconv /= np.max(deconv)
 
