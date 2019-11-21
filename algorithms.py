@@ -1,51 +1,63 @@
 import numpy as np
-import skimage.external.tifffile as tifffile
-from skimage import img_as_float32, img_as_float
-from skimage import transform
+import scipy.ndimage as ndi
+from skimage import img_as_float, img_as_float32
+from skimage.external import tifffile
 
 
-def deconvolve(input_data_file, data_voxel_size, input_psf_file, psf_voxel_size, output_file):
+def clamp(img):
+    img[img < 0] = 0
+    img[img > 1] = 1
+    return img
+
+
+def convolve(input_data_file, input_psf_file, output_file):
+    psf = tifffile.imread(input_psf_file)
+    img = tifffile.imread(input_data_file)
+    convolved = ndi.convolve(img, psf)
+    tifffile.imsave(output_file, img_as_float32(convolved), compress=5)
+
+
+def fftpad(img, target_size,shift=False):
+
+    if img.shape[0] % 2 == 0:
+        img = np.pad(img, ((0,1),(0,0)), "constant")
+    if img.shape[1] % 2 == 0:
+        img = np.pad(img, ((0,0),(0,1)), "constant")
+
+    c = target_size - np.array(img.shape)
+    c //= 2
+    p = ((c[0], c[0]), (c[1], c[1]))
+    pd = np.pad(img, p, "constant")
+    if shift:
+        pd = np.roll(pd, -(np.array(pd.shape) // 2 - 1), (0, 1))
+    return pd
+
+
+def fftunpad(img, source_size):
+    if source_size[0] % 2 == 0:
+        img = img[:-1,:]
+    if source_size[1] % 2 == 0:
+        img = img[:,:-1]
+    pad = (np.array(img.shape) - np.array(source_size)) // 2
+    print(pad)
+    return img[pad[0]:source_size[0]+pad[0],pad[1]:source_size[1]+pad[1]]
+
+
+def deconvolve(input_data_file, input_psf_file, output_file):
 
     # Parameter for regularized inverse filter
     rif_lambda = 0.001
 
-    psf = tifffile.imread(input_psf_file)[0,:,:,:]
-    img = tifffile.imread(input_data_file)
+    psf = tifffile.imread(input_psf_file)
+    convolved = tifffile.imread(input_data_file)
 
-    # Resize PSF to match the image voxel size
-    psf_new_shape = np.array(img.shape) * (psf_voxel_size / data_voxel_size)
-    psf_new_shape = tuple(int(x) for x in psf_new_shape)
-    psf = transform.resize(psf, psf_new_shape)
+    target_size = np.array(convolved.shape) + np.array(psf.shape) - 1
+    H = np.fft.fft2(fftpad(psf, target_size, True))
+    Y = np.fft.fft2(fftpad(convolved, target_size))
+    L = np.fft.fft2(fftpad(np.reshape([1, 1, 1, 1, -8, 1, 1, 1, 1], (3, 3)) / 8, target_size, True))
 
-    # FFT output shape
-    fft_shape = np.maximum(img.shape, psf.shape)
+    X = Y * H / ((H * H) + (L * rif_lambda * L))
+    x = clamp(np.fft.ifft2(X).real)
+    x = fftunpad(x, convolved.shape)
 
-    # Transform into Fourier space
-    img = img_as_float(img)
-    img_fft = np.fft.fftn(img, s=fft_shape)
-
-    psf = img_as_float(psf)
-    psf_fft = np.fft.fftn(psf, s=fft_shape)
-
-    # Apply RIF
-    # Adapted from DeconvolutionLab2 code
-    # See https://github.com/Biomedical-Imaging-Group/DeconvolutionLab2/blob/master/src/main/java/deconvolution/algorithm/RegularizedInverseFilter.java
-    Y = img_fft
-    H = psf_fft
-
-    ## Generate laplacian
-    l = np.ones((3, 3, 3))
-    l[1, 1, 1] = -(3 * 3 * 3 - 1)
-    l /= np.max(l)
-
-    L = np.fft.fftn(l, img_fft.shape)
-    H2 = H * H
-    L2 = L * rif_lambda * L
-    FA = H2 + L2
-    FT = H / FA
-    X = Y * FT
-    deconv = np.fft.ifftn(X, s=img.shape).real
-    deconv -= np.min(deconv)
-    deconv /= np.max(deconv)
-
-    tifffile.imsave(output_file, img_as_float32(deconv))
+    tifffile.imsave(output_file, img_as_float32(x), compress=5)
