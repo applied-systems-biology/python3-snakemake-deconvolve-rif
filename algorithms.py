@@ -19,14 +19,15 @@ def convolve(input_data_file, input_psf_file, output_file):
 
 def fftpad(img, target_size,shift=False):
 
+    # Additional padding for even image dimensions
+    ap = [0, 0]
     if img.shape[0] % 2 == 0:
-        img = np.pad(img, ((0,1),(0,0)), "constant")
+        ap[0] = 1
     if img.shape[1] % 2 == 0:
-        img = np.pad(img, ((0,0),(0,1)), "constant")
+        ap[1] = 1
 
-    c = target_size - np.array(img.shape)
-    c //= 2
-    p = ((c[0], c[0]), (c[1], c[1]))
+    c = (target_size - np.array(img.shape) - ap) // 2
+    p = ((c[0], c[0] + ap[0]), (c[1], c[1] + ap[1]))
     pd = np.pad(img, p, "constant")
     if shift:
         pd = np.roll(pd, -(np.array(pd.shape) // 2 - 1), (0, 1))
@@ -34,12 +35,12 @@ def fftpad(img, target_size,shift=False):
 
 
 def fftunpad(img, source_size):
+    ap = [0, 0]
     if source_size[0] % 2 == 0:
-        img = img[:-1,:]
+        ap[0] = 1
     if source_size[1] % 2 == 0:
-        img = img[:,:-1]
-    pad = (np.array(img.shape) - np.array(source_size)) // 2
-    print(pad)
+        ap[1] = 1
+    pad = (np.array(img.shape) - np.array(source_size) - ap) // 2
     return img[pad[0]:source_size[0]+pad[0],pad[1]:source_size[1]+pad[1]]
 
 
