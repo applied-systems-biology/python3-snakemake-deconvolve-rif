@@ -58,7 +58,7 @@ def deconvolve(input_data_file, input_psf_file, output_file):
     L = np.fft.fft2(fftpad(np.reshape([1, 1, 1, 1, -8, 1, 1, 1, 1], (3, 3)) / 8, target_size, True))
 
     X = Y * H / ((H * H) + (L * rif_lambda * L))
-    x = clamp(np.fft.ifft2(X).real)
+    x = np.fft.ifft2(X).real
     x = fftunpad(x, convolved.shape)
 
     tifffile.imsave(output_file, img_as_float32(x), compress=5)
