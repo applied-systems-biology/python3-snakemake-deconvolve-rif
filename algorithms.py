@@ -44,6 +44,23 @@ def fftunpad(img, source_size):
     return img[pad[0]:source_size[0]+pad[0],pad[1]:source_size[1]+pad[1]]
 
 
+def get_laplacian(target_size):
+    sz = np.array(target_size)
+    sz2 = sz // 2 + 1
+    psz = sz - sz2
+    u = np.tile(np.arange(0, sz2[1], dtype=np.float), sz2[0])
+    u = np.reshape(u, sz2)
+    v = np.repeat(np.arange(0, sz2[0], dtype=np.float), sz2[1])
+    v = np.reshape(v, sz2)
+
+    u = np.pi * u / (sz[1] / 2)
+    v = np.pi * v / (sz[0] / 2)
+
+    h = u ** 2 + v ** 2
+    h = np.pad(h, ((0, psz[0]), (0, psz[1])), mode="reflect")
+    return h + 1j * np.zeros(target_size, dtype=np.float)
+
+
 def deconvolve(input_data_file, input_psf_file, output_file):
 
     # Parameter for regularized inverse filter
@@ -55,7 +72,8 @@ def deconvolve(input_data_file, input_psf_file, output_file):
     target_size = np.array(convolved.shape) + np.array(psf.shape) - 1
     H = np.fft.fft2(fftpad(psf, target_size, True))
     Y = np.fft.fft2(fftpad(convolved, target_size))
-    L = np.fft.fft2(fftpad(np.reshape([1, 1, 1, 1, -8, 1, 1, 1, 1], (3, 3)) / 8, target_size, True))
+    # L = np.fft.fft2(fftpad(np.reshape([1, 1, 1, 1, -8, 1, 1, 1, 1], (3, 3)) / 8, target_size, True))
+    L = get_laplacian(Y.shape)
 
     X = Y * H / ((H * H) + (L * rif_lambda * L))
     x = np.fft.ifft2(X).real
