@@ -30,7 +30,7 @@ def fftpad(img, target_size,shift=False):
     p = ((c[0], c[0] + ap[0]), (c[1], c[1] + ap[1]))
     pd = np.pad(img, p, "constant")
     if shift:
-        pd = np.roll(pd, -(np.array(pd.shape) // 2 - 1), (0, 1))
+        pd = np.roll(pd, -(np.array(pd.shape) // 2), (0, 1))
     return pd
 
 
